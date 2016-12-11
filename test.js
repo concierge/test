@@ -45,10 +45,10 @@ exports.start = function (callback) {
 
     cli = cline();
     cli.command('*', function (input) {
-        if (/^set (senderName)|(senderId)|(threadId) \w+$/.test(input)) {
+        if (/^set (senderName)|(senderId)|(threadId) [^ ].*$/.test(input)) {
             var spl = input.split(' ');
-            exports.config[spl[1]] = spl[2];
-            return api.sendMessage('Set ' + spl[1] + ' to "' + spl[2] + '"', 'null');
+            exports.config[spl[1]] = spl.slice(2).join(' ');
+            return api.sendMessage('Set ' + spl[1] + ' to "' + exports.config[spl[1]] + '"', 'null');
         }
 
         var event = shim.createEvent(exports.config.threadId, exports.config.senderId, exports.config.senderName, input);
