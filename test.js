@@ -48,7 +48,7 @@ exports.start = function (callback) {
         if (/^set (senderName)|(senderId)|(threadId) \w+$/.test(input)) {
             var spl = input.split(' ');
             exports.config[spl[1]] = spl[2];
-            return api.sendMessage('Set ' + spl[1] + ' to "' + spl[2] + '"');
+            return api.sendMessage('Set ' + spl[1] + ' to "' + spl[2] + '"', 'null');
         }
 
         var event = shim.createEvent(exports.config.threadId, exports.config.senderId, exports.config.senderName, input);
