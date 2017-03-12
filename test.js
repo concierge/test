@@ -54,7 +54,7 @@ exports.start = function (callback) {
         var event = shim.createEvent(exports.config.threadId, exports.config.senderId, exports.config.senderName, input);
         receivedCallback(api, event);
         input = input.trim();
-        if (input.length > 0 && input !== 'exit' && input !== 'history') {
+        if (input.length > 0 && input !== 'exit' && input !== 'history' && !hasStartedShutdown) {
             exports.config.commandHistory.push(input);
         }
     });
