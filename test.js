@@ -1,91 +1,108 @@
-var cline = require('cline'),
-    chalk = require('chalk'),
-    historySize = 1024,
-    receivedCallback = null,
-    cli = null,
-    api = null,
-    hasStartedShutdown = false;
+const cline = require('cline'),
+    chalk = require('chalk');
 
-exports.getApi = function() {
-    return api;
+class TestIntegrationApi extends shim {
+    constructor (config) {
+        super(config.commandPrefix);
+        this._config = config;
+    }
+
+    sendMessage (text) {
+        console.info(chalk.bold(`\r${text}`));
+    }
+
+    getUsers (thread) {
+        const obj = {};
+        if (thread === this._config.threadId) {
+            obj[this._config.senderId] = {
+                name: this._config.senderName
+            };
+        }
+        return obj;
+    }
 };
 
-exports.start = function (callback) {
-    receivedCallback = callback;
-
-    if (!exports.config.threadId) {
-        exports.config.threadId = 1;
-    }
-    if (!exports.config.senderId) {
-        exports.config.senderId = 0;
-    }
-    if (!exports.config.senderName) {
-        exports.config.senderName = 'TESTING';
-    }
-    if (!exports.config.commandHistory) {
-        exports.config.commandHistory = [];
+class TestIntegration {
+    constructor () {
+        this._receivedCallback = null;
+        this._cli = null;
+        this._api = null;
+        this._hasStartedShutdown = false;
+        this._history = null;
     }
 
-    class TestIntegration extends shim {
-        sendMessage(text) {
-            console.log(chalk.bold('\r' + text));
-        }
-
-        getUsers(thread) {
-            let obj = {};
-            if (thread == exports.config.threadId) {
-                obj[exports.config.senderId] = {
-                    name: exports.config.senderName
-                }
-            }
-            return obj;
+    static _ensureConfig (config, property, defaultValue) {
+        if (!config[property]) {
+            config[property] = defaultValue;
         }
     }
-    api = new TestIntegration(exports.config.commandPrefix);
 
-    cli = cline();
-    cli.command('*', function (input) {
+    start (callback) {
+        TestIntegration._ensureConfig(this.config, 'threadId', 1);
+        TestIntegration._ensureConfig(this.config, 'senderId', 0);
+        TestIntegration._ensureConfig(this.config, 'historySize', 1024);
+        TestIntegration._ensureConfig(this.config, 'commandHistory', []);
+        TestIntegration._ensureConfig(this.config, 'senderName', 'TESTING');
+        this.config.commandHistory = this.config.commandHistory.filter((i, p, a) => p === 0 || i !== a[p - 1]);
+        this._history = this.config.commandHistory.slice(0);
+
+        this._receivedCallback = callback;
+        this._api = new TestIntegrationApi(this.config);
+
+        this._cli = cline();
+        this._cli.command('*', this._commandAny.bind(this));
+        this._cli.command('history', this._commandHistory.bind(this));
+        this._cli.on('close', this._onClose.bind(this));
+        this._cli.history(this._history);
+        setTimeout(() => this._cli.interact(`${this.platform.packageInfo.name}> `), 100);
+    }
+
+    stop () {
+        this._hasStartedShutdown = true;
+        this._cli.close();
+    }
+
+    _boundArray (input) {
+        if (input) {
+            this.config.commandHistory.push(input);
+        }
+        this.config.commandHistory.splice(0, this.config.commandHistory.length - this.config.historySize);
+    }
+
+    _commandAny (input) {
         if (/^set (senderName)|(senderId)|(threadId) [^ ].*$/.test(input)) {
-            var spl = input.split(' ');
-            exports.config[spl[1]] = spl.slice(2).join(' ');
-            return api.sendMessage('Set ' + spl[1] + ' to "' + exports.config[spl[1]] + '"', 'null');
+            const spl = input.split(' ');
+            this.config[spl[1]] = spl.slice(2).join(' ');
+            this._api.sendMessage(`Set ${spl[1]} to "${this.config[spl[1]]}"`, this.config.threadId);
+            this._history.push(input);
         }
-
-        var event = shim.createEvent(exports.config.threadId, exports.config.senderId, exports.config.senderName, input);
-        receivedCallback(api, event);
+        else {
+            const event = shim.createEvent(this.config.threadId, this.config.senderId, this.config.senderName, input);
+            this._receivedCallback(this._api, event);
+        }
         input = input.trim();
-        if (input.length > 0 && input !== 'exit' && input !== 'history' && !hasStartedShutdown) {
-            exports.config.commandHistory.push(input);
+        const hist = this.config.commandHistory;
+        if (!!input && input !== 'exit' && !this._hasStartedShutdown && hist[hist.length - 1] !== input) {
+            this._boundArray(input);
         }
-    });
+    }
 
-    cli.command('history', function () {
-        var hist = exports.config.commandHistory,
-            results = '';
-        for (var i = 0; i < hist.length; i++) {
-            results += hist[i] + (i + 1 === hist.length ? '' : '\n');
+    _commandHistory () {
+        this._boundArray('history');
+        const hist = this.config.commandHistory.join('\n');
+        return this._api.sendMessage(hist, this.config.threadId);
+    }
+
+    _onClose () {
+        if (!this._hasStartedShutdown) {
+            this._hasStartedShutdown = true;
+            this.platform.shutdown();
         }
-        return api.sendMessage(results, exports.config.thread);
-    });
+    }
 
-    cli.on('close', function () {
-        if (hasStartedShutdown) {
-            return;
-        }
-        hasStartedShutdown = true;
-        exports.platform.shutdown();
-    });
-
-    cli.history(exports.config.commandHistory.slice(0));
-    setTimeout(function () {
-        cli.interact(exports.platform.packageInfo.name + '> ');
-    }, 100);
-};
-
-exports.stop = function () {
-    hasStartedShutdown = true;
-    cli.close();
-    if (exports.config.commandHistory.length > historySize) {
-        exports.config.commandHistory.splice(0, exports.config.commandHistory.length - historySize);
+    getApi () {
+        return this._api;
     }
 };
+
+module.exports = new TestIntegration();
