@@ -13,7 +13,7 @@ class TestIntegrationApi extends shim {
 
     getUsers (thread) {
         const obj = {};
-        if (thread === this._config.threadId) {
+        if (thread == this._config.threadId) {
             obj[this._config.senderId] = {
                 name: this._config.senderName
             };
