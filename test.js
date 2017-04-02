@@ -70,10 +70,14 @@ class TestIntegration {
     }
 
     _commandAny (input) {
-        if (/^set (senderName)|(senderId)|(threadId) [^ ].*$/.test(input)) {
-            const spl = input.split(' ');
-            this.config[spl[1]] = spl.slice(2).join(' ');
-            this._api.sendMessage(`Set ${spl[1]} to "${this.config[spl[1]]}"`, this.config.threadId);
+        if (/^set (senderName)|(senderId)|(threadId)|(logLevel) [^ ].*$/.test(input)) {
+            const spl = input.split(' '),
+                val = spl.slice(2).join(' ');
+            if (spl[1] === 'logLevel')
+                console.setLogLevel(val);
+            else
+                this.config[spl[1]] = val;
+            this._api.sendMessage(`Set ${spl[1]} to "${val}"`, this.config.threadId);
             this._history.push(input);
         }
         else {
